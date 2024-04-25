@@ -5,7 +5,13 @@ case class GameListItem(
   price: String,
   picture: String,
   link: String
-)
+) {
+  private val idRegex = ".+/game/(\\d+)/.+".r
+  val id: Option[Int] =
+    idRegex
+      .findFirstIn(link)
+      .map { case idRegex(v) => v.toInt }
+}
 
 case class Game(
   title: String,

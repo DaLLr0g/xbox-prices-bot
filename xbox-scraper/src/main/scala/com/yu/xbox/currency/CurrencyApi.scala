@@ -9,8 +9,6 @@ import sttp.model.StatusCode.Ok
 import io.circe.Decoder
 import io.circe.parser.decode
 
-case class Rates(rates: Map[String, Double])
-
 object CurrencyApi {
   def rapidRequest(): Map[String, Double] = {
 
@@ -22,12 +20,12 @@ object CurrencyApi {
     val backend  = HttpURLConnectionBackend()
     val response = request.send(backend)
 
-    response match
-      case Response(Right(responseValue), Ok, _, _, _, _) =>
-        decode[Map[String, Double]](responseValue)(Decoder.instance(_.downField("rates").as[Map[String, Double]])) match
-          case Right(rates) => rates
-          case Left(error)  => throw error
-      case Response(body, code, statusText, headers, history, request) =>
-        throw Exception(body.toString)
+    response.body
+      .flatMap(responseBody =>
+        decode[Map[String, Double]](responseBody)(Decoder.instance(_.downField("rates").as[Map[String, Double]]))
+      ) match
+      case Left(error: io.circe.Error) => throw error
+      case Left(error: String)         => throw new Exception(error)
+      case Right(value)                => value
   }
 }

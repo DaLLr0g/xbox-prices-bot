@@ -1,41 +1,47 @@
 package com.yu.xbox.scrapper
 
+import sttp.client4.DefaultSyncBackend
 import sttp.client4.Response
 import sttp.client4.UriContext
 import sttp.client4.basicRequest
-import sttp.client4.httpurlconnection.HttpURLConnectionBackend
 import sttp.model.HeaderNames
 import sttp.model.MediaType
 import sttp.model.StatusCode.Ok
 
+import cats.effect
+import cats.effect.Async
+import cats.effect.IO
 import io.circe.parser.decode
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract.*
 import net.ruippeixotog.scalascraper.dsl.DSL.*
+
 import com.yu.xbox.model.Currency
 import com.yu.xbox.model.Game
 import com.yu.xbox.model.GameListItem
+import com.yu.xbox.scrapper.Scrapper.UserAgent
+import com.yu.xbox.scrapper.Scrapper.XMLHttpRequest
 
-object GameScrapper extends Scrapper[GameListItem, Option[Game]] {
+class GameScrapper[F[_]: Async] extends Scrapper[F, GameListItem, Game] {
   private val PricesUrl = "https://xbdeals.net/products/ajax-compare-prices?id="
 
-  override def scrapPage(gameCard: GameListItem): Option[Game] = {
+  override def scrapPage(gameCard: GameListItem): F[Game] = {
     val doc = browser.get(s"https://xbdeals.net${gameCard.link}")
 
     val gameContainer = doc >?> element(".game-container")
-
-    for {
-      cont  <- gameContainer
-      title <- gameContainer >> text(".game-title-info-name")
-
-      id <- gameContainer >> attr("content")("meta[itemprop='sku']")
-      prices = getPrices(id)
-    } yield {
-      Game(
+    Async[F].fromOption(
+      for {
+        cont    <- gameContainer
+        title   <- gameContainer >> text(".game-title-info-name")
+        picture <- gameContainer >> attr("content")(".game-cover-image")
+        id      <- gameContainer >> attr("content")("meta[itemprop='sku']")
+        prices = getPrices(id)
+      } yield Game(
         title,
-        id,
+        picture,
         prices
-      )
-    }
+      ),
+      new RuntimeException()
+    )
   }
 
   private def getPrices(id: String): List[Currency] = {
@@ -50,14 +56,12 @@ object GameScrapper extends Scrapper[GameListItem, Option[Game]] {
       country     = element >> attr("title")
       countryCode = element >> text(".compare-prices-store-name")
       price       = element >> text(".compare-prices-price")
-    } yield {
-      Currency(
-        country,
-        countryCode,
-        parseCurrencyAmount(price),
-        currencyPattern.findFirstIn(price).getOrElse("")
-      )
-    }
+    } yield Currency(
+      country,
+      countryCode,
+      parseCurrencyAmount(price),
+      currencyPattern.findFirstIn(price).getOrElse("")
+    )
   }
 
   private def parseCurrencyAmount(input: String): Double = {
@@ -75,8 +79,11 @@ object GameScrapper extends Scrapper[GameListItem, Option[Game]] {
       .header(HeaderNames.UserAgent, UserAgent)
       .header(HeaderNames.XRequestedWith, XMLHttpRequest)
       .get(uri"$PricesUrl$id")
+//      .response()
 
-    val backend  = HttpURLConnectionBackend()
+    val backend = DefaultSyncBackend()
+
+//    val backend  = HttpURLConnectionBackend()
     val response = request.send(backend)
 
     response match
@@ -86,6 +93,5 @@ object GameScrapper extends Scrapper[GameListItem, Option[Game]] {
           case Left(error)  => throw error
       case Response(body, code, statusText, headers, history, request) =>
         throw Exception(body.toString)
-
   }
 }

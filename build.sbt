@@ -1,16 +1,22 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
-ThisBuild / scalaVersion := "3.3.1"
+ThisBuild / scalaVersion := "3.4.1"
 
-val scalaFixSettings = Seq(
-  semanticdbEnabled := true,
-  scalafixDependencies += "com.github.xuwei-k" %% "scalafix-rules" % "0.3.5"
+val settings = Seq(
+  semanticdbEnabled                            := true,
+  scalafixDependencies += "com.github.xuwei-k" %% "scalafix-rules" % "0.3.5",
+  scalacOptions ++= Seq(
+    "-feature",
+    "-deprecation",
+    "-unchecked",
+    "-language:postfixOps"
+  ),
+  libraryDependencies ++= Dependencies.common
 )
 
 inThisBuild(
-    scalaFixSettings
+  settings
 )
-
 
 lazy val root = (project in file("."))
   .aggregate(xboxScraper, xboxPricesBot)
@@ -26,7 +32,9 @@ lazy val xboxScraper = (project in file("xbox-scraper"))
 
 lazy val xboxPricesBot = (project in file("xbox-prices-bot"))
   .settings(
-    name := "xbox-prices-bot"
+    name := "xbox-prices-bot",
+    libraryDependencies ++= Dependencies.xboxBot
   )
+  .dependsOn(xboxScraper)
 
 addCommandAlias("fmtAll", "scalafmtAll; scalafmtSbt; scalafixAll")
